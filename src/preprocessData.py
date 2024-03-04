@@ -33,7 +33,8 @@ for category in ["Normal", "Pneumonia"]:
 # Function to resize image
 def resize_image(src_file, dst_file, size=(224, 224)):
     with Image.open(src_file) as img:
-        img_resized = img.resize(size, Image.ANTIALIAS)
+        # Use Image.Resampling.LANCZOS for high-quality downsampling
+        img_resized = img.resize(size, Image.Resampling.LANCZOS)
         img_resized.save(dst_file)
 
 # Define the categories and subcategories
