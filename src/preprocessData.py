@@ -3,14 +3,16 @@ import os
 from PIL import Image
 import subprocess
 
+
 # Function to check directory and download dataset if needed
-def check_and_download_dataset(path_to_raw_data, dataset_identifier):
-    if not os.path.exists(path_to_raw_data):
+def check_and_download_dataset(path_to_raw, dataset_id):
+    if not os.path.exists(path_to_raw):
         # Create the RawData directory if it doesn't exist
-        os.makedirs(os.path.dirname(path_to_raw_data), exist_ok=True)
+        os.makedirs(os.path.dirname(path_to_raw), exist_ok=True)
         # Use Kaggle API to download the dataset
         # Ensure that your kaggle.json file with your api key is in ~/.kaggle directory
-        subprocess.run(['kaggle', 'datasets', 'download', '-d', dataset_identifier, '--path', os.path.dirname(path_to_raw_data), '--unzip'], check=True)
+        subprocess.run(['kaggle', 'datasets', 'download', '-d', dataset_id, '--path', os.path.dirname(path_to_raw), '--unzip'], check=True)
+
 
 # Define the base directory paths
 path_to_raw_data = "../rawData"
@@ -30,12 +32,14 @@ if not os.path.exists(base_dst_path):
 for category in ["Normal", "Pneumonia"]:
     os.makedirs(os.path.join(base_dst_path, category), exist_ok=True)
 
+
 # Function to resize image
-def resize_image(src_file, dst_file, size=(224, 224)):
-    with Image.open(src_file) as img:
+def resize_image(src, dst, size=(224, 224)):
+    with Image.open(src) as img:
         # Use Image.Resampling.LANCZOS for high-quality downsampling
         img_resized = img.resize(size, Image.Resampling.LANCZOS)
-        img_resized.save(dst_file)
+        img_resized.save(dst)
+
 
 # Define the categories and subcategories
 subdirs = ["test", "train", "val"]
