@@ -28,6 +28,17 @@ class DataLoaders:
         train, val, test = random_split(dataset, [train_size, val_size, test_size])
         return train, val, test
 
+    def get_loader(self, phase):
+        if phase == "train":
+            return self.trainLoader
+        elif phase == "val":
+            return self.valLoader
+        elif phase == "test":
+            return self.testLoader
+        else:
+            raise ValueError("Invalid phase specified")
+
+
 
 data = DataLoaders()
 train_features, train_labels = next(iter(data.trainLoader))
