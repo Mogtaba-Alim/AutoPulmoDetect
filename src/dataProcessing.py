@@ -8,7 +8,9 @@ import matplotlib.pyplot as plt
 # Create a DataLoaders class that will store the dataLoaders for train, validation and test, can be reused with other models.
 class DataLoaders:
     def __init__(self):
-        dataloader_transforms = transforms.Compose([transforms.ToTensor()])
+        dataloader_transforms = transforms.Compose([transforms.ToTensor(),
+                                                    transforms.Normalize([0.485, 0.456, 0.406],
+                                                                         [0.229, 0.224, 0.225])])
         full_data = datasets.ImageFolder(root="../procData", transform=dataloader_transforms)
         train_data, val_data, test_data = self.split_data(full_data)
         self.trainLoader = DataLoader(train_data, batch_size=64, shuffle=True)
