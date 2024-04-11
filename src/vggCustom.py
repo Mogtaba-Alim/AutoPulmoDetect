@@ -31,7 +31,6 @@ class VGGCustom(nn.Module):
         self.bn9 = nn.BatchNorm2d(1024)
         self.conv10 = nn.Conv2d(1024, 512, kernel_size=3, padding=1)
         self.bn10 = nn.BatchNorm2d(512)
-        # Add dropout here
 
         # Fully connected layers
         self.fc1 = nn.Linear(4608, 512)
