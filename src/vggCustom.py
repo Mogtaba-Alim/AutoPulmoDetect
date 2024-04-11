@@ -2,7 +2,6 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
-
 device = 'cuda' if torch.cuda.is_available() else 'cpu'
 
 
@@ -75,6 +74,4 @@ class VGGCustom(nn.Module):
         x = F.relu(self.fc6(x))
         x = self.predictions(x)
 
-        # Apply softmax for prediction probabilities
-        x = F.softmax(x)
         return x
