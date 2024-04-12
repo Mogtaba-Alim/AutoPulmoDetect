@@ -4,6 +4,7 @@ import torch.optim as optim
 from torchvision import transforms, models, datasets
 import time
 import copy
+import torchmetrics
 
 from vggCustom import VGGCustom
 from dataProcessing import DataLoaders
@@ -13,9 +14,13 @@ device = 'cuda' if torch.cuda.is_available() else 'cpu'
 
 
 def train_model(model, dataloaders, criterion, optimizer, num_epochs=25):
-    since = time.time()
     best_model_wts = copy.deepcopy(model.state_dict())
-    best_acc = 0.0
+    best_f1 = 0.0
+
+    # Initialize metrics for binary classification
+    precision = torchmetrics.Precision(num_classes=2, average='macro', task='binary').to(device)
+    recall = torchmetrics.Recall(num_classes=2, average='macro', task='binary').to(device)
+    f1 = torchmetrics.F1Score(num_classes=2, average='macro', task='binary').to(device)
 
     for epoch in range(num_epochs):
         print(f'Epoch {epoch+1}/{num_epochs}')
@@ -28,9 +33,10 @@ def train_model(model, dataloaders, criterion, optimizer, num_epochs=25):
                 model.eval()
 
             running_loss = 0.0
-            running_corrects = 0
+            precision.reset()
+            recall.reset()
+            f1.reset()
 
-            # Access dataloader using the get_loader method
             loader = dataloaders.get_loader(phase)
 
             for inputs, labels in loader:
@@ -49,18 +55,22 @@ def train_model(model, dataloaders, criterion, optimizer, num_epochs=25):
                         optimizer.step()
 
                 running_loss += loss.item() * inputs.size(0)
-                running_corrects += torch.sum(preds == labels.data)
+                precision.update(preds, labels)
+                recall.update(preds, labels)
+                f1.update(preds, labels)
 
             epoch_loss = running_loss / len(loader.dataset)
-            epoch_acc = running_corrects.double() / len(loader.dataset)
-            print(f'{phase.capitalize()} Loss: {epoch_loss:.4f} Acc: {epoch_acc:.4f}')
+            epoch_precision = precision.compute()
+            epoch_recall = recall.compute()
+            epoch_f1 = f1.compute()
+            print(f'{phase.capitalize()} Loss: {epoch_loss:.4f} Precision: {epoch_precision:.4f} Recall: {epoch_recall:.4f} F1 Score: {epoch_f1:.4f}')
 
-            if phase == 'val' and epoch_acc > best_acc:
-                best_acc = epoch_acc
+            if phase == 'val' and epoch_f1 > best_f1:
+                best_f1 = epoch_f1
                 best_model_wts = copy.deepcopy(model.state_dict())
 
     model.load_state_dict(best_model_wts)
-    return model, best_acc
+    return model, best_f1
 
 
 
@@ -78,34 +88,34 @@ def initialize_model(model_name, num_classes):
 def setup_and_train(model_name, num_classes, lr, num_epochs, dataloaders):
     print(f"Training {model_name} Model")
     model = initialize_model(model_name, num_classes)
-    model = model.to(device)
+    model.to(device)
 
     optimizer = optim.Adam(model.parameters(), lr=lr)
     criterion = nn.CrossEntropyLoss()
 
-    # Train the model
-    model, best_acc = train_model(model, dataloaders, criterion, optimizer, num_epochs)
-
-    return model, best_acc
-
+    model, best_f1 = train_model(model, dataloaders, criterion, optimizer, num_epochs)
+    return model, best_f1
 
 data = DataLoaders()
 
-# Parameters for training
-# Default
-# learning_rate = 0.001
-# epochs = 25
-# Testing
-learning_rate = 0.1
-epochs = 1
+epochs_list = [25, 50, 75]
+learning_rates = [0.001, 0.0005, 0.0001]
 
+results = []
 
-# Train VGGCustom
-vgg_custom, vgg_best_acc = setup_and_train("vggcustom", num_classes=2, lr=learning_rate, num_epochs=epochs, dataloaders=data)
-torch.save(vgg_custom.state_dict(), "vggcustom_best_model.pth")
-print(f"Saved VGGCustom with Best Validation Accuracy: {vgg_best_acc:.4f}")
+for epochs in epochs_list:
+    for lr in learning_rates:
+        print(f"Training with {epochs} epochs and learning rate {lr}")
+        vgg_custom, vgg_best_f1 = setup_and_train("vggcustom", num_classes=2, lr=lr, num_epochs=epochs, dataloaders=data)
+        torch.save(vgg_custom.state_dict(), f"vggcustom_lr_{lr}_epochs_{epochs}_best_model.pth")
+        print(f"Saved VGGCustom with lr {lr} and epochs {epochs}, Best Validation F1-Score: {vgg_best_f1:.4f}")
 
-# Train DenseNet-169
-densenet, densenet_best_acc = setup_and_train("densenet169", num_classes=2, lr=learning_rate, num_epochs=epochs, dataloaders=data)
-torch.save(densenet.state_dict(), "densenet169_best_model.pth")
-print(f"Saved DenseNet-169 with Best Validation Accuracy: {densenet_best_acc:.4f}")
+        densenet, densenet_best_f1 = setup_and_train("densenet169", num_classes=2, lr=lr, num_epochs=epochs, dataloaders=data)
+        torch.save(densenet.state_dict(), f"densenet169_lr_{lr}_epochs_{epochs}_best_model.pth")
+        print(f"Saved DenseNet-169 with lr {lr} and epochs {epochs}, Best Validation F1-Score: {densenet_best_f1:.4f}")
+
+        results.append((lr, epochs, 'VGGCustom', vgg_best_f1))
+        results.append((lr, epochs, 'DenseNet-169', densenet_best_f1))
+
+for result in results:
+    print(f"Learning Rate: {result[0]}, Epochs: {result[1]}, Model: {result[2]}, Best F1-Score: {result[3]:.4f}")
