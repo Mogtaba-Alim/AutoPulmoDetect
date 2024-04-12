@@ -40,12 +40,12 @@ class DataLoaders:
 
 
 
-data = DataLoaders()
-train_features, train_labels = next(iter(data.trainLoader))
-print(f"Feature batch shape: {train_features.size()}")
-print(f"Labels batch shape: {train_labels.size()}")
-img = train_features[0].permute(1, 2, 0).squeeze()
-label = train_labels[0]
-plt.imshow(img, cmap="gray")
-plt.show()
-print(f"Label: {label}")
+# data = DataLoaders()
+# train_features, train_labels = next(iter(data.trainLoader))
+# print(f"Feature batch shape: {train_features.size()}")
+# print(f"Labels batch shape: {train_labels.size()}")
+# img = train_features[0].permute(1, 2, 0).squeeze()
+# label = train_labels[0]
+# plt.imshow(img, cmap="gray")
+# plt.show()
+# print(f"Label: {label}")
