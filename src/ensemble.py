@@ -1,8 +1,10 @@
+import numpy
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
 import torch.optim as optim
 import copy
+import torchmetrics
 from torchvision import models
 
 from dataProcessing import DataLoaders
@@ -11,13 +13,6 @@ device = 'cuda' if torch.cuda.is_available() else 'cpu'
 
 
 # Ensemble model is composite of GoogLeNet, ResNet-18 and DenseNet-121
-class Ensemble(nn.Module):
-    def __init__(self, model1, model2, model3):
-        super(self).__init__()
-        self.googlenet = model1
-        self.resnet = model2
-        self.densenet = model3
-
 
 def freeze_params(model):
     for param in model.parameters():
@@ -26,7 +21,14 @@ def freeze_params(model):
 
 def finetune_base(model, dataloaders, crit, optimizer, num_epochs=25):
     best_model_wts = copy.deepcopy(model.state_dict())
-    best_acc = 0.0
+    best_auc = 0.0
+    A = []
+
+    # Initialize metrics for binary classification
+    precision = torchmetrics.Precision(num_classes=2, average='macro', task='binary').to(device)
+    recall = torchmetrics.Recall(num_classes=2, average='macro', task='binary').to(device)
+    f1 = torchmetrics.F1Score(num_classes=2, average='macro', task='binary').to(device)
+    auc = torchmetrics.AUROC(num_classes=2, average='macro', task='binary').to(device)
 
     for epoch in range(num_epochs):
         print(f'Epoch {epoch+1}/{num_epochs}')
@@ -39,9 +41,11 @@ def finetune_base(model, dataloaders, crit, optimizer, num_epochs=25):
                 model.eval()
 
             running_loss = 0.0
-            running_corrects = 0
+            precision.reset()
+            recall.reset()
+            f1.reset()
+            auc.reset()
 
-            # Access dataloader using the get_loader method
             loader = dataloaders.get_loader(phase)
 
             for inputs, labels in loader:
@@ -60,18 +64,25 @@ def finetune_base(model, dataloaders, crit, optimizer, num_epochs=25):
                         optimizer.step()
 
                 running_loss += loss.item() * inputs.size(0)
-                running_corrects += torch.sum(preds == labels.data)
+                precision.update(preds, labels)
+                recall.update(preds, labels)
+                f1.update(preds, labels)
+                auc.update(preds, labels)
 
             epoch_loss = running_loss / len(loader.dataset)
-            epoch_acc = running_corrects.double() / len(loader.dataset)
-            print(f'{phase.capitalize()} Loss: {epoch_loss:.4f} Acc: {epoch_acc:.4f}')
+            epoch_precision = precision.compute()
+            epoch_recall = recall.compute()
+            epoch_f1 = f1.compute()
+            epoch_auc = auc.compute()
+            print(f'{phase.capitalize()} Loss: {epoch_loss:.4f} Precision: {epoch_precision:.4f} Recall: {epoch_recall:.4f} F1 Score: {epoch_f1:.4f} AUC Score: {epoch_auc:.4f}')
 
-            if phase == 'val' and epoch_acc > best_acc:
-                best_acc = epoch_acc
+            if phase == 'val' and epoch_auc > best_auc:
+                best_auc = epoch_auc
+                A = [epoch_precision, epoch_recall, epoch_f1, epoch_auc]
                 best_model_wts = copy.deepcopy(model.state_dict())
 
     model.load_state_dict(best_model_wts)
-    return model, best_acc
+    return model, A
 
 
 dataloader = DataLoaders()
@@ -83,7 +94,7 @@ googlenet.fc = nn.Linear(in_features=1024, out_features=2)
 googlenet.to(device)
 googlenetAdam = optim.Adam(googlenet.fc.parameters(), lr=0.001)
 googlenetScheduler = optim.lr_scheduler.ReduceLROnPlateau(googlenetAdam, "min")
-finetune_base(googlenet, dataloader, criterion, googlenetAdam, 30)
+# googlenet, A_googlenet = finetune_base(googlenet, dataloader, criterion, googlenetAdam, 5)
 
 resnet = models.resnet18(weights=models.ResNet18_Weights.DEFAULT)
 freeze_params(resnet)
@@ -91,7 +102,7 @@ resnet.fc = nn.Linear(in_features=512, out_features=2)
 resnet.to(device)
 resnetAdam = optim.Adam(resnet.fc.parameters(), lr=0.001)
 resnetScheduler = optim.lr_scheduler.ReduceLROnPlateau(resnetAdam, "min")
-finetune_base(resnet, dataloader, criterion, resnetAdam, 30)
+# resnet, A_resnet = finetune_base(resnet, dataloader, criterion, resnetAdam, 5)
 
 densenet = models.densenet161(weights=models.DenseNet161_Weights.DEFAULT)
 freeze_params(densenet)
@@ -104,4 +115,17 @@ densenet.classifier = densenetClassifier
 densenet.to(device)
 densenetAdam = optim.Adam(densenet.classifier.parameters(), lr=0.001)
 densenetScheduler = optim.lr_scheduler.ReduceLROnPlateau(densenetAdam, "min")
-finetune_base(densenet, dataloader, criterion, densenetAdam, 30)
+# densenet, A_densenet = finetune_base(densenet, dataloader, criterion, densenetAdam, 5)
+
+# PLACEHOLDER A MATRICES
+a1 = [0.9693, 0.9693, 0.9693, 0.9346]
+a2 = [0.9775, 0.9693, 0.9734, 0.9483]
+a3 = [0.9914, 0.9673, 0.9773, 0.9682]
+
+w1 = sum([numpy.tanh(x) for x in a1])
+w2 = sum([numpy.tanh(x) for x in a2])
+w3 = sum([numpy.tanh(x) for x in a3])
+
+print(w1)
+print(w2)
+print(w3)
