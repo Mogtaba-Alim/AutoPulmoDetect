@@ -6,10 +6,6 @@ device = 'cuda' if torch.cuda.is_available() else 'cpu'
 
 
 # This Custom VGG model follows the VGG-16 architecture with convolutional dropout implementation
-import torch
-import torch.nn as nn
-import torch.nn.functional as F
-
 class VGGCustom(nn.Module):
     def __init__(self):
         super(VGGCustom, self).__init__()
