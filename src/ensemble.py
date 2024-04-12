@@ -4,7 +4,7 @@ import torch.nn.functional as F
 import torch.optim as optim
 import copy
 from torchvision import models
-
+import torchmetrics
 from dataProcessing import DataLoaders
 
 device = 'cuda' if torch.cuda.is_available() else 'cpu'
@@ -13,10 +13,17 @@ device = 'cuda' if torch.cuda.is_available() else 'cpu'
 # Ensemble model is composite of GoogLeNet, ResNet-18 and DenseNet-121
 class Ensemble(nn.Module):
     def __init__(self, model1, model2, model3):
-        super(self).__init__()
+        super(Ensemble, self).__init__()
         self.googlenet = model1
         self.resnet = model2
         self.densenet = model3
+
+    def forward(self, x):
+        output1 = self.googlenet(x)
+        output2 = self.resnet(x)
+        output3 = self.densenet(x)
+        outputs = (output1 + output2 + output3) / 3
+        return outputs
 
 
 def freeze_params(model):
@@ -24,9 +31,14 @@ def freeze_params(model):
         param.requires_grad = False
 
 
-def finetune_base(model, dataloaders, crit, optimizer, num_epochs=25):
+def finetune_base(model, dataloaders, crit, optimizer, num_epochs=25, model_name="ensemble"):
     best_model_wts = copy.deepcopy(model.state_dict())
-    best_acc = 0.0
+    best_f1 = 0.0
+
+    # Metrics
+    precision_metric = torchmetrics.Precision(num_classes=2, average='macro', task="binary").to(device)
+    recall_metric = torchmetrics.Recall(num_classes=2, average='macro', task="binary").to(device)
+    f1_metric = torchmetrics.F1Score(num_classes=2, average='macro', task="binary").to(device)
 
     for epoch in range(num_epochs):
         print(f'Epoch {epoch+1}/{num_epochs}')
@@ -39,9 +51,10 @@ def finetune_base(model, dataloaders, crit, optimizer, num_epochs=25):
                 model.eval()
 
             running_loss = 0.0
-            running_corrects = 0
+            precision_metric.reset()
+            recall_metric.reset()
+            f1_metric.reset()
 
-            # Access dataloader using the get_loader method
             loader = dataloaders.get_loader(phase)
 
             for inputs, labels in loader:
@@ -60,48 +73,63 @@ def finetune_base(model, dataloaders, crit, optimizer, num_epochs=25):
                         optimizer.step()
 
                 running_loss += loss.item() * inputs.size(0)
-                running_corrects += torch.sum(preds == labels.data)
+                precision_metric.update(preds, labels)
+                recall_metric.update(preds, labels)
+                f1_metric.update(preds, labels)
 
             epoch_loss = running_loss / len(loader.dataset)
-            epoch_acc = running_corrects.double() / len(loader.dataset)
-            print(f'{phase.capitalize()} Loss: {epoch_loss:.4f} Acc: {epoch_acc:.4f}')
+            epoch_precision = precision_metric.compute()
+            epoch_recall = recall_metric.compute()
+            epoch_f1 = f1_metric.compute()
+            print(f'{phase.capitalize()} Loss: {epoch_loss:.4f} Precision: {epoch_precision:.4f} Recall: {epoch_recall:.4f} F1 Score: {epoch_f1:.4f}')
 
-            if phase == 'val' and epoch_acc > best_acc:
-                best_acc = epoch_acc
+            if phase == 'val' and epoch_f1 > best_f1:
+                best_f1 = epoch_f1
                 best_model_wts = copy.deepcopy(model.state_dict())
+                # Save the best model along with the metrics
+                torch.save({
+                    'model_state': best_model_wts,
+                    'precision': epoch_precision,
+                    'recall': epoch_recall,
+                    'f1_score': epoch_f1
+                }, f"{model_name}_lr_{optimizer.param_groups[0]['lr']}_epochs_{num_epochs}_best_f1.pth")
 
     model.load_state_dict(best_model_wts)
-    return model, best_acc
-
+    return model, best_f1
 
 dataloader = DataLoaders()
 criterion = nn.CrossEntropyLoss()
 
-googlenet = models.googlenet(weights=models.GoogLeNet_Weights.DEFAULT)
-freeze_params(googlenet)
-googlenet.fc = nn.Linear(in_features=1024, out_features=2)
-googlenet.to(device)
-googlenetAdam = optim.Adam(googlenet.fc.parameters(), lr=0.001)
-googlenetScheduler = optim.lr_scheduler.ReduceLROnPlateau(googlenetAdam, "min")
-finetune_base(googlenet, dataloader, criterion, googlenetAdam, 30)
+# Define hyperparameters
+learning_rates = [0.001, 0.0005, 0.0001]
+epochs_list = [25, 50, 75]
 
-resnet = models.resnet18(weights=models.ResNet18_Weights.DEFAULT)
-freeze_params(resnet)
-resnet.fc = nn.Linear(in_features=512, out_features=2)
-resnet.to(device)
-resnetAdam = optim.Adam(resnet.fc.parameters(), lr=0.001)
-resnetScheduler = optim.lr_scheduler.ReduceLROnPlateau(resnetAdam, "min")
-finetune_base(resnet, dataloader, criterion, resnetAdam, 30)
+for lr in learning_rates:
+    for epochs in epochs_list:
+        print(f"Training ensemble with lr={lr}, epochs={epochs}")
 
-densenet = models.densenet161(weights=models.DenseNet161_Weights.DEFAULT)
-freeze_params(densenet)
-densenetClassifier = nn.Sequential(
-  nn.Linear(in_features=2208, out_features=1024),
-  nn.ReLU(),
-  nn.Linear(in_features=1024, out_features=2)
-)
-densenet.classifier = densenetClassifier
-densenet.to(device)
-densenetAdam = optim.Adam(densenet.classifier.parameters(), lr=0.001)
-densenetScheduler = optim.lr_scheduler.ReduceLROnPlateau(densenetAdam, "min")
-finetune_base(densenet, dataloader, criterion, densenetAdam, 30)
+        googlenet = models.googlenet(pretrained=True)
+        freeze_params(googlenet)
+        googlenet.fc = nn.Linear(in_features=1024, out_features=2)
+        googlenet.to(device)
+
+        resnet = models.resnet18(pretrained=True)
+        freeze_params(resnet)
+        resnet.fc = nn.Linear(in_features=512, out_features=2)
+        resnet.to(device)
+
+        densenet = models.densenet121(pretrained=True)
+        freeze_params(densenet)
+        densenet.classifier = nn.Linear(in_features=1024, out_features=2)
+        densenet.to(device)
+
+        ensemble_model = Ensemble(googlenet, resnet, densenet)
+        optimizer = optim.Adam([
+            {'params': googlenet.fc.parameters()},
+            {'params': resnet.fc.parameters()},
+            {'params': densenet.classifier.parameters()}
+        ], lr=lr)
+
+        trained_ensemble, best_f1 = finetune_base(ensemble_model, dataloader, criterion, optimizer, epochs, model_name="ensemble_model")
+        print(f"Trained ensemble with lr={lr}, epochs={epochs}, Best F1={best_f1:.4f}")
+
