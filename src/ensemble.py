@@ -104,7 +104,7 @@ resnetAdam = optim.Adam(resnet.fc.parameters(), lr=0.001)
 resnetScheduler = optim.lr_scheduler.ReduceLROnPlateau(resnetAdam, "min")
 # resnet, A_resnet = finetune_base(resnet, dataloader, criterion, resnetAdam, 5)
 
-densenet = models.densenet161(weights=models.DenseNet161_Weights.DEFAULT)
+densenet = models.densenet121(weights=models.DenseNet161_Weights.DEFAULT)
 freeze_params(densenet)
 densenetClassifier = nn.Sequential(
   nn.Linear(in_features=2208, out_features=1024),
