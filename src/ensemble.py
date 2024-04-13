@@ -1,7 +1,5 @@
-import numpy
 import torch
 import torch.nn as nn
-import torch.nn.functional as F
 import torch.optim as optim
 import copy
 import torchmetrics
@@ -90,42 +88,65 @@ criterion = nn.CrossEntropyLoss()
 
 googlenet = models.googlenet(weights=models.GoogLeNet_Weights.DEFAULT)
 freeze_params(googlenet)
-googlenet.fc = nn.Linear(in_features=1024, out_features=2)
+googlenet.fc = nn.Linear(googlenet.fc.in_features, out_features=2)
 googlenet.to(device)
-googlenetAdam = optim.Adam(googlenet.fc.parameters(), lr=0.001)
-googlenetScheduler = optim.lr_scheduler.ReduceLROnPlateau(googlenetAdam, "min")
-# googlenet, A_googlenet = finetune_base(googlenet, dataloader, criterion, googlenetAdam, 5)
+googlenetAdam = optim.Adam(googlenet.fc.parameters(), lr=0.0001)
+# googlenetScheduler = optim.lr_scheduler.ReduceLROnPlateau(googlenetAdam, "min")
+googlenet, A_googlenet = finetune_base(googlenet, dataloader, criterion, googlenetAdam)
 
 resnet = models.resnet18(weights=models.ResNet18_Weights.DEFAULT)
 freeze_params(resnet)
-resnet.fc = nn.Linear(in_features=512, out_features=2)
+resnet.fc = nn.Linear(resnet.fc.in_features, out_features=2)
 resnet.to(device)
-resnetAdam = optim.Adam(resnet.fc.parameters(), lr=0.001)
-resnetScheduler = optim.lr_scheduler.ReduceLROnPlateau(resnetAdam, "min")
-# resnet, A_resnet = finetune_base(resnet, dataloader, criterion, resnetAdam, 5)
+resnetAdam = optim.Adam(resnet.fc.parameters(), lr=0.0001)
+# resnetScheduler = optim.lr_scheduler.ReduceLROnPlateau(resnetAdam, "min")
+resnet, A_resnet = finetune_base(resnet, dataloader, criterion, resnetAdam)
 
-densenet = models.densenet121(weights=models.DenseNet161_Weights.DEFAULT)
+densenet = models.densenet121(weights=models.DenseNet121_Weights.DEFAULT)
 freeze_params(densenet)
-densenetClassifier = nn.Sequential(
-  nn.Linear(in_features=2208, out_features=1024),
-  nn.ReLU(),
-  nn.Linear(in_features=1024, out_features=2)
-)
-densenet.classifier = densenetClassifier
+densenet.classifier = nn.Linear(in_features=1024, out_features=2)
 densenet.to(device)
-densenetAdam = optim.Adam(densenet.classifier.parameters(), lr=0.001)
-densenetScheduler = optim.lr_scheduler.ReduceLROnPlateau(densenetAdam, "min")
-# densenet, A_densenet = finetune_base(densenet, dataloader, criterion, densenetAdam, 5)
+densenetAdam = optim.Adam(densenet.classifier.parameters(), lr=0.0001)
+# densenetScheduler = optim.lr_scheduler.ReduceLROnPlateau(densenetAdam, "min")
+densenet, A_densenet = finetune_base(densenet, dataloader, criterion, densenetAdam)
 
 # PLACEHOLDER A MATRICES
-a1 = [0.9693, 0.9693, 0.9693, 0.9346]
+"""a1 = [0.9693, 0.9693, 0.9693, 0.9346]
 a2 = [0.9775, 0.9693, 0.9734, 0.9483]
 a3 = [0.9914, 0.9673, 0.9773, 0.9682]
 
-w1 = sum([numpy.tanh(x) for x in a1])
-w2 = sum([numpy.tanh(x) for x in a2])
-w3 = sum([numpy.tanh(x) for x in a3])
+w1 = sum([np.tanh(x) for x in a1])
+w2 = sum([np.tanh(x) for x in a2])
+w3 = sum([np.tanh(x) for x in a3])"""
 
-print(w1)
-print(w2)
-print(w3)
+w1 = sum([torch.tanh(x) for x in A_googlenet])
+w2 = sum([torch.tanh(x) for x in A_resnet])
+w3 = sum([torch.tanh(x) for x in A_densenet])
+
+p1 = torch.empty((0, 2)).to(device)
+p2 = torch.empty((0, 2)).to(device)
+p3 = torch.empty((0, 2)).to(device)
+true_vals = torch.empty(0).to(device)
+
+googlenet.eval()
+resnet.eval()
+densenet.eval()
+for i, t in dataloader.testLoader:
+    i = i.to(device)
+    t = t.to(device)
+    y_googlenet = googlenet(i)
+    p1 = torch.cat((p1, torch.softmax(y_googlenet, dim=1)))
+    y_resnet = resnet(i)
+    p2 = torch.cat((p2, torch.softmax(y_resnet, dim=1)))
+    y_densenet = densenet(i)
+    p3 = torch.cat((p3, torch.softmax(y_densenet, dim=1)))
+    true_vals = torch.cat((true_vals, t))
+
+correct = 0
+for j in range(p1.shape[0]):
+    ensemble_j = (p1[j] * w1 + p2[j] * w2 + p3[j] + w3) / (w1 + w2 + w3)
+    prediction = torch.argmax(ensemble_j)
+    if prediction == true_vals[j]:
+        correct += 1
+
+print(f'Accuracy: {correct / p1.shape[0]:.4f}')
