@@ -3,6 +3,7 @@ import torch.nn as nn
 import numpy as np
 from torchvision import transforms, models, datasets
 from sklearn.metrics import confusion_matrix, ConfusionMatrixDisplay
+import os
 
 import matplotlib
 matplotlib.use('TkAgg')
@@ -55,6 +56,7 @@ def evaluate_model(model, loader):
     correct, total = 0, 0
     y, t = torch.Tensor(), torch.Tensor()
     true_negative, true_positive, false_negative, false_positive = 0, 0, 0, 0
+    tn_hist, tp_hist, fn_hist, fp_hist = torch.zeros(10), torch.zeros(10), torch.zeros(10), torch.zeros(10)
 
     for inputs, labels in loader:
         # Calculating predictions and outputs of Model
@@ -77,14 +79,62 @@ def evaluate_model(model, loader):
         # Histogram information
         outputs = torch.softmax(outputs, 1)
 
+        negative_label_mask = labels == 0
+        positive_label_mask = labels == 1
+        negative_pred_mask = preds == 0
+        positive_pred_mask = preds == 1
+
+        # true positive
+        tp_batch_hist = torch.histc(outputs[positive_label_mask.logical_and(positive_pred_mask), 1], 10, min=0.5, max=1)
+        tp_hist = tp_hist + tp_batch_hist
+
+        # true negative
+        tn_batch_hist = torch.histc(outputs[negative_label_mask.logical_and(negative_pred_mask), 0], 10, min=0.5, max=1)
+        tn_hist = tn_hist + tn_batch_hist
+
+        # false positive
+        fp_batch_hist = torch.histc(outputs[negative_label_mask.logical_and(positive_pred_mask), 1], 10, min=0.5, max=1)
+        fp_hist = fp_hist + fp_batch_hist
+
+        # false negative
+        fn_batch_hist = torch.histc(outputs[positive_label_mask.logical_and(negative_pred_mask), 0], 10, min=0.5, max=1)
+        fn_hist = fn_hist + fn_batch_hist
+
     cm = np.array([[true_negative, false_positive],
           [false_negative, true_positive]])
     print(f"correct: {correct}, total: {total}, accuracy: {correct / total * 100:.02f}%")
-    return cm, 1
+    return cm, tp_hist, tn_hist, fp_hist, fn_hist
 
 
-cm, t = evaluate_model(model, loader)
-cmp = ConfusionMatrixDisplay(cm, display_labels=["0", "1"])
-cmp.plot()
-plt.title("Confusion Matrix (Healthy vs Diseased Data)")
-plt.show()
+def plot_hist(freqs, title, filename, skip_show=True):
+    plt.figure()
+    bins = np.linspace(0.5, 1, 10, endpoint=False)
+
+    plt.title(title)
+    plt.bar(bins, freqs, align='edge', width=0.045)
+    plt.xticks(bins)
+    plt.xlim(0.5, 1)
+    plt.savefig(filename)
+
+    if not skip_show:
+        plt.show()
+
+
+def plot_confusion_matrix(conf_matrix, title, filename, skip_show=True):
+    cmp = ConfusionMatrixDisplay(conf_matrix, display_labels=["0", "1"])
+    cmp.plot()
+    plt.title(title)
+    plt.savefig(filename)
+
+    if not skip_show:
+        plt.show()
+
+
+cm, tp_h, tn_h, fp_h, fn_h = evaluate_model(model, loader)
+os.makedirs(os.path.dirname("../plots/"), exist_ok=True)
+
+plot_hist(tp_h, "VGG True Positive Confidence Histogram", "../plots/vgg_TP_hist")
+plot_hist(tn_h, "VGG True Negative Confidence Histogram", "../plots/vgg_TN_hist")
+plot_hist(fp_h, "VGG False Positive Confidence Histogram", "../plots/vgg_FP_hist")
+plot_hist(fn_h, "VGG False Negative Confidence Histogram", "../plots/vgg_FN_hist")
+plot_confusion_matrix(cm, "Confusion Matrix VGG", "../plots/vgg_confusion")
