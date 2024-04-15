@@ -38,20 +38,6 @@ def load_model(model_name, num_classes):
     return model
 
 
-data = DataLoaders()
-
-epochs_list = [25, 50, 75]
-learning_rates = [0.001, 0.0005, 0.0001]
-
-results = []
-
-model = load_model("vggcustom", 2)
-
-model.eval()
-
-loader = data.testLoader
-
-
 def evaluate_model(model, loader):
     correct, total = 0, 0
     y, t = torch.Tensor(), torch.Tensor()
@@ -100,10 +86,9 @@ def evaluate_model(model, loader):
         fn_batch_hist = torch.histc(outputs[positive_label_mask.logical_and(negative_pred_mask), 0], 10, min=0.5, max=1)
         fn_hist = fn_hist + fn_batch_hist
 
-    cm = np.array([[true_negative, false_positive],
+    con_matrix = np.array([[true_negative, false_positive],
           [false_negative, true_positive]])
-    print(f"correct: {correct}, total: {total}, accuracy: {correct / total * 100:.02f}%")
-    return cm, tp_hist, tn_hist, fp_hist, fn_hist
+    return con_matrix, tp_hist, tn_hist, fp_hist, fn_hist, correct, total
 
 
 def plot_hist(freqs, title, filename, skip_show=True):
@@ -130,11 +115,36 @@ def plot_confusion_matrix(conf_matrix, title, filename, skip_show=True):
         plt.show()
 
 
-cm, tp_h, tn_h, fp_h, fn_h = evaluate_model(model, loader)
+def plot_graphs(cm, tp_h, tn_h, fp_h, fn_h, model_name):
+    plot_hist(tp_h, f"{model_name} True Positive Confidence Histogram", f"../plots/{model_name}_TP_hist")
+    plot_hist(tn_h, f"{model_name} True Negative Confidence Histogram", f"../plots/{model_name}_TN_hist")
+    plot_hist(fp_h, f"{model_name} False Positive Confidence Histogram", f"../plots/{model_name}_FP_hist")
+    plot_hist(fn_h, f"{model_name} False Negative Confidence Histogram", f"../plots/{model_name}_FN_hist")
+    plot_confusion_matrix(cm, f"Confusion Matrix {model_name}", f"../plots/{model_name}_confusion")
+
+
 os.makedirs(os.path.dirname("../plots/"), exist_ok=True)
 
-plot_hist(tp_h, "VGG True Positive Confidence Histogram", "../plots/vgg_TP_hist")
-plot_hist(tn_h, "VGG True Negative Confidence Histogram", "../plots/vgg_TN_hist")
-plot_hist(fp_h, "VGG False Positive Confidence Histogram", "../plots/vgg_FP_hist")
-plot_hist(fn_h, "VGG False Negative Confidence Histogram", "../plots/vgg_FN_hist")
-plot_confusion_matrix(cm, "Confusion Matrix VGG", "../plots/vgg_confusion")
+data = DataLoaders()
+loader = data.testLoader
+
+
+## VGG EVALUATE
+model = load_model("vggcustom", 2)
+model.eval()
+
+conf_matrix, tp_hist, tn_hist, fp_hist, fn_hist, correct, total = evaluate_model(model, loader)
+
+print(f"VGG: correct: {correct}, total: {total}, accuracy: {correct / total * 100:.02f}%")
+plot_graphs(conf_matrix, tp_hist, tn_hist, fp_hist, fn_hist, "VGG")
+
+
+## DENSENET169 EVALUATE
+model = load_model("densenet169", 2)
+model.eval()
+
+print("Loaded Model")
+conf_matrix, tp_hist, tn_hist, fp_hist, fn_hist, correct, total = evaluate_model(model, loader)
+
+print(f"Densenet169: correct: {correct}, total: {total}, accuracy: {correct / total * 100:.02f}%")
+plot_graphs(conf_matrix, tp_hist, tn_hist, fp_hist, fn_hist, "Densenet169")
