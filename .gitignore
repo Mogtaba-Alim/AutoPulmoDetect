@@ -160,6 +160,7 @@ cython_debug/
 #.idea/
 /rawData/
 /testData
+/plots/
 .DS_Store
 .idea/
 /procData/
