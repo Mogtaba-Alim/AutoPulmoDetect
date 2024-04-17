@@ -82,38 +82,39 @@ def finetune_base(model, dataloaders, crit, optimizer, num_epochs=25, model_name
             if phase == 'val' and epoch_f1 > best_f1:
                 best_f1 = epoch_f1
                 best_model_wts = copy.deepcopy(model.state_dict())
-                torch.save({
-                    'model_state': best_model_wts,
-                    'precision': epoch_precision,
-                    'recall': epoch_recall,
-                    'f1_score': epoch_f1
-                }, f"{model_name}_lr_{optimizer.param_groups[0]['lr']}_epochs_{num_epochs}_best_f1.pth")
+                torch.save(
+                    best_model_wts,
+                    f"{model_name}_lr_{optimizer.param_groups[0]['lr']}_epochs_{num_epochs}_best_f1.pth")
 
     model.load_state_dict(best_model_wts)
     return model, best_f1
 
-# Load data
-dataloader = DataLoaders()
-criterion = nn.CrossEntropyLoss()
 
-# Define hyperparameters
-learning_rates = [0.001, 0.0005, 0.0001]
-epochs_list = [25, 50, 75]
+if __name__ == '__main__':
+    device = 'cuda' if torch.cuda.is_available() else 'cpu'
 
-# Results list
-results = []
+    # Load data
+    dataloader = DataLoaders()
+    criterion = nn.CrossEntropyLoss()
 
-# Hyperparameter tuning
-for lr in learning_rates:
-    for epochs in epochs_list:
-        print(f"Training Benchmark Model with lr={lr}, epochs={epochs}")
-        benchmark_model = BenchmarkModel()
-        benchmark_model.to(device)
-        optimizer = optim.Adam(benchmark_model.parameters(), lr=lr)
-        trained_benchmark, best_f1 = finetune_base(benchmark_model, dataloader, criterion, optimizer, epochs, model_name="benchmark_model")
-        results.append((lr, epochs, best_f1))
-        print(f"Trained Benchmark Model, lr={lr}, epochs={epochs}, Best F1={best_f1:.4f}")
+    # Define hyperparameters
+    learning_rates = [0.001, 0.0005, 0.0001]
+    epochs_list = [25, 50, 75]
 
-# Summarize results
-for result in results:
-    print(f"Learning Rate: {result[0]}, Epochs: {result[1]}, Best F1-Score: {result[2]:.4f}")
+    # Results list
+    results = []
+
+    # Hyperparameter tuning
+    for lr in learning_rates:
+        for epochs in epochs_list:
+            print(f"Training Benchmark Model with lr={lr}, epochs={epochs}")
+            benchmark_model = BenchmarkModel()
+            benchmark_model.to(device)
+            optimizer = optim.Adam(benchmark_model.parameters(), lr=lr)
+            trained_benchmark, best_f1 = finetune_base(benchmark_model, dataloader, criterion, optimizer, epochs, model_name="benchmark_model")
+            results.append((lr, epochs, best_f1))
+            print(f"Trained Benchmark Model, lr={lr}, epochs={epochs}, Best F1={best_f1:.4f}")
+
+    # Summarize results
+    for result in results:
+        print(f"Learning Rate: {result[0]}, Epochs: {result[1]}, Best F1-Score: {result[2]:.4f}")
