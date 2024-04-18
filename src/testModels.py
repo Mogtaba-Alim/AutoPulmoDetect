@@ -57,6 +57,7 @@ def load_model(model_name, num_classes):
 def evaluate_model(model, loader, device):
     model.eval()  # Set the model to evaluation mode
     correct, total = 0, 0
+    true_negative, false_positive, false_negative, true_positive = 0, 0, 0, 0  # Initialize here
     tn_hist, tp_hist, fn_hist, fp_hist = torch.zeros(10), torch.zeros(10), torch.zeros(10), torch.zeros(10)
     tn_hist, tp_hist, fn_hist, fp_hist = tn_hist.to(device), tp_hist.to(device), fn_hist.to(device), fp_hist.to(device)
 
@@ -68,10 +69,10 @@ def evaluate_model(model, loader, device):
             preds = torch.argmax(outputs, dim=1)
 
             # Confusion matrix updates
-            true_negative = torch.sum((preds == 0) & (labels == 0)).item()
-            false_positive = torch.sum((preds == 1) & (labels == 0)).item()
-            false_negative = torch.sum((preds == 0) & (labels == 1)).item()
-            true_positive = torch.sum((preds == 1) & (labels == 1)).item()
+            true_negative += torch.sum((preds == 0) & (labels == 0)).item()
+            false_positive += torch.sum((preds == 1) & (labels == 0)).item()
+            false_negative += torch.sum((preds == 0) & (labels == 1)).item()
+            true_positive += torch.sum((preds == 1) & (labels == 1)).item()
 
             # Histogram updates
             tp_mask = (labels == 1) & (preds == 1)
@@ -92,6 +93,8 @@ def evaluate_model(model, loader, device):
 
     # Convert histograms to numpy for return or further processing
     return con_matrix, tp_hist.cpu().numpy(), tn_hist.cpu().numpy(), fp_hist.cpu().numpy(), fn_hist.cpu().numpy(), correct, total
+
+
 
 def ensemble_testing(dataloader, device, googlenet, resnet, densenet):
     w1 = sum([torch.tanh(x) for x in A_googlenet])
