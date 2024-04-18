@@ -21,7 +21,7 @@ base_dst_path = "../testData/procData/"
 dataset_identifier = "fernando2rad/x-ray-lung-diseases-images-9-classes"
 
 # Check if the dataset exists, if not, download it
-# check_and_download_dataset(base_src_path, dataset_identifier)
+check_and_download_dataset(base_src_path, dataset_identifier)
 
 # Check if the procData directory exists, if not, create it
 if not os.path.exists(base_dst_path):

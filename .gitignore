@@ -160,7 +160,10 @@ cython_debug/
 #.idea/
 /rawData/
 /testData
-/plots/
 .DS_Store
 .idea/
 /procData/
+/src/benchmark_models/
+/src/densenet169_models/
+/src/ensemble_models/
+/src/vggcustom_models/
