@@ -1,4 +1,4 @@
-# Lung-Disease-X-Ray-Diagnosis
+# AutoPulmoDetect
 
 ## Description
 
